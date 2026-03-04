@@ -41,12 +41,13 @@ class LMStudioConnect(io.ComfyNode):
                     placeholder="Leave '-' for lm-studio",
                     tooltip="Bearer token for LMStudio OpenAI-compatible API.",
                 ),
-                io.Combo.Input(
+                io.String.Input(
                     id="model",
                     display_name="Model",
-                    options=[MODEL_PLACEHOLDER],
                     default=MODEL_PLACEHOLDER,
-                    tooltip="Select a loaded model. Use the refresh button on this node to populate options.",
+                    tooltip=(
+                        "Model id. The web extension renders this field as a dropdown and syncs the selected model value."
+                    ),
                 ),
                 io.Boolean.Input(
                     id="reasoning_enabled",

@@ -75,10 +75,8 @@ class LMStudioTextGen(io.ComfyNode):
         )
 
     @classmethod
-    def validate_inputs(cls, user_prompt: str) -> bool | str:
-        prompt_text = (user_prompt or "")
-        if not prompt_text.strip():
-            return "user_prompt must not be empty"
+    def validate_inputs(cls, user_prompt: str | None = None) -> bool | str:
+        # user_prompt is often linked from another node; defer strict checks to execute().
         return True
 
     @classmethod
@@ -119,6 +117,8 @@ class LMStudioTextGen(io.ComfyNode):
     ) -> io.NodeOutput:
         system_prompt = system_prompt or ""
         user_prompt = user_prompt or ""
+        if not user_prompt.strip():
+            raise ValueError("user_prompt must not be empty")
 
         resolved_seed = resolve_request_seed(seed)
         client = create_openai_client(

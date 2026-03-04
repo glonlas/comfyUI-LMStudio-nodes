@@ -16,6 +16,79 @@ function getWidget(node, name) {
   return node.widgets?.find((widget) => widget?.name === name);
 }
 
+function normalizeModelList(models) {
+  if (!Array.isArray(models)) {
+    return [];
+  }
+  const out = [];
+  const seen = new Set();
+  for (const model of models) {
+    const value = String(model ?? "").trim();
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function ensureModelDropdown(node) {
+  if (node.__lmstudioModelDropdown && node.__lmstudioModelTextWidget) {
+    return {
+      comboWidget: node.__lmstudioModelDropdown,
+      textWidget: node.__lmstudioModelTextWidget,
+    };
+  }
+
+  const modelTextWidget = getWidget(node, "model");
+  if (!modelTextWidget) {
+    return null;
+  }
+
+  modelTextWidget.hidden = true;
+  const currentModel = String(modelTextWidget.value ?? "").trim();
+  const initialValues = currentModel && currentModel !== MODEL_PLACEHOLDER
+    ? [currentModel]
+    : [MODEL_PLACEHOLDER];
+
+  const comboWidget = node.addWidget(
+    "combo",
+    "Model",
+    initialValues[0],
+    (value) => {
+      modelTextWidget.value = String(value ?? "").trim();
+    },
+    { values: initialValues }
+  );
+
+  node.__lmstudioModelDropdown = comboWidget;
+  node.__lmstudioModelTextWidget = modelTextWidget;
+
+  return { comboWidget, textWidget: modelTextWidget };
+}
+
+function syncDropdownFromText(node) {
+  const refs = ensureModelDropdown(node);
+  if (!refs) {
+    return;
+  }
+
+  const { comboWidget, textWidget } = refs;
+  const currentModel = String(textWidget.value ?? "").trim();
+  const options = normalizeModelList(comboWidget?.options?.values || []);
+
+  if (!currentModel) {
+    return;
+  }
+
+  if (!options.includes(currentModel)) {
+    options.unshift(currentModel);
+    comboWidget.options.values = options;
+  }
+  comboWidget.value = currentModel;
+}
+
 function buildQuery(node) {
   const serverWidget = getWidget(node, "server_url");
   const tokenWidget = getWidget(node, "api_token");
@@ -53,29 +126,55 @@ async function fetchJson(path) {
 }
 
 function applyModelOptions(node, models) {
-  const modelWidget = getWidget(node, "model");
-  if (!modelWidget) {
+  const refs = ensureModelDropdown(node);
+  if (!refs) {
     return;
   }
 
-  const nextValues = Array.isArray(models) && models.length > 0 ? models : [MODEL_PLACEHOLDER];
-  if (!modelWidget.options) {
-    modelWidget.options = {};
-  }
-  modelWidget.options.values = nextValues;
+  const { comboWidget, textWidget } = refs;
+  const currentModel = String(textWidget.value ?? "").trim();
 
-  if (!nextValues.includes(modelWidget.value)) {
-    modelWidget.value = nextValues[0];
+  let nextValues = normalizeModelList(models);
+  if (currentModel && currentModel !== MODEL_PLACEHOLDER && !nextValues.includes(currentModel)) {
+    nextValues.unshift(currentModel);
   }
+  if (nextValues.length === 0) {
+    nextValues = [MODEL_PLACEHOLDER];
+  }
+
+  comboWidget.options.values = nextValues;
+
+  const selected = currentModel && nextValues.includes(currentModel)
+    ? currentModel
+    : nextValues[0];
+
+  comboWidget.value = selected;
+  textWidget.value = selected;
 
   node.setDirtyCanvas?.(true, true);
   node.graph?.setDirtyCanvas?.(true, true);
+}
+
+function notifySuccess(message) {
+  if (typeof app.extensionManager?.toast?.add === "function") {
+    app.extensionManager.toast.add({
+      severity: "success",
+      summary: "LMStudio",
+      detail: message,
+      life: 3500,
+    });
+  } else {
+    console.info(`[LMStudio] ${message}`);
+  }
 }
 
 function attachButtons(node) {
   if (node.__lmstudioButtonsAttached) {
     return;
   }
+
+  ensureModelDropdown(node);
+  syncDropdownFromText(node);
 
   const refreshModels = async () => {
     const query = buildQuery(node);
@@ -90,24 +189,16 @@ function attachButtons(node) {
     applyModelOptions(node, models);
 
     const message = payload.message || `Connected. ${models.length} model(s) available.`;
-    if (typeof app.extensionManager?.toast?.add === "function") {
-      app.extensionManager.toast.add({
-        severity: "success",
-        summary: "LMStudio",
-        detail: message,
-        life: 3500,
-      });
-    } else {
-      console.info(`[LMStudio] ${message}`);
-    }
+    notifySuccess(message);
   };
 
   node.addWidget("button", "Refresh Models", null, async () => {
     try {
       await refreshModels();
     } catch (error) {
+      const message = error?.message || String(error);
       console.error("[LMStudio] Model refresh failed", error);
-      window.alert(`Model refresh failed: ${error.message}`);
+      window.alert(`Model refresh failed: ${message}`);
     }
   });
 
@@ -115,8 +206,9 @@ function attachButtons(node) {
     try {
       await testConnection();
     } catch (error) {
+      const message = error?.message || String(error);
       console.error("[LMStudio] Connectivity test failed", error);
-      window.alert(`Connectivity test failed: ${error.message}`);
+      window.alert(`Connectivity test failed: ${message}`);
     }
   });
 
@@ -134,6 +226,13 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function () {
       onNodeCreated?.apply(this, arguments);
       attachButtons(this);
+    };
+
+    const onConfigure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function () {
+      onConfigure?.apply(this, arguments);
+      ensureModelDropdown(this);
+      syncDropdownFromText(this);
     };
   },
 });
