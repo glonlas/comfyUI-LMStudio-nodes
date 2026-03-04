@@ -8,3 +8,5 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+.coverage*
+htmlcov/
