@@ -8,7 +8,6 @@ from .client import (
     build_chat_messages_with_image,
     comfy_image_to_base64_png_url,
     create_openai_client,
-    dump_openai_response,
     extract_chat_completion_text,
     extract_responses_text,
     resolve_request_seed,
@@ -66,16 +65,6 @@ class LMStudioImageToText(io.ComfyNode):
                     id="response_text",
                     display_name="Response",
                     tooltip="Generated text output.",
-                ),
-                io.Int.Output(
-                    id="used_seed",
-                    display_name="Used Seed",
-                    tooltip="Resolved seed used for the request.",
-                ),
-                io.String.Output(
-                    id="raw_response",
-                    display_name="Raw Response",
-                    tooltip="Raw model response serialized as JSON/text for debugging.",
                 ),
             ],
         )
@@ -166,7 +155,6 @@ class LMStudioImageToText(io.ComfyNode):
             text = extract_responses_text(response).strip()
             if not text:
                 raise ValueError("responses endpoint returned no text output")
-            raw_response = dump_openai_response(response)
         except Exception as responses_error:
             via_endpoint = "chat.completions"
             fallback_reason = str(responses_error)
@@ -189,7 +177,6 @@ class LMStudioImageToText(io.ComfyNode):
             text = extract_chat_completion_text(completion).strip()
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")
-            raw_response = dump_openai_response(completion)
 
         text = strip_think_content(text)
 
@@ -199,7 +186,5 @@ class LMStudioImageToText(io.ComfyNode):
 
         return io.NodeOutput(
             text,
-            resolved_seed,
-            raw_response,
             ui=ui.PreviewText(status),
         )
