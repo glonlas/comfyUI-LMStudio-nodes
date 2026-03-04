@@ -2,6 +2,12 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
 const CONNECT_NODE_IDS = new Set(["LMStudio_Connect", "LMStudio - Connect"]);
+const PROMPT_NODE_IDS = new Set([
+  "LMStudio_TextGen",
+  "LMStudio - Text Gen",
+  "LMStudio_ImageToText",
+  "LMStudio - Image To Text",
+]);
 const MODEL_PLACEHOLDER = "<refresh models>";
 
 function isConnectNodeDefinition(nodeData) {
@@ -9,6 +15,14 @@ function isConnectNodeDefinition(nodeData) {
     CONNECT_NODE_IDS.has(nodeData?.name) ||
     CONNECT_NODE_IDS.has(nodeData?.display_name) ||
     CONNECT_NODE_IDS.has(nodeData?.node_id)
+  );
+}
+
+function isPromptNodeDefinition(nodeData) {
+  return (
+    PROMPT_NODE_IDS.has(nodeData?.name) ||
+    PROMPT_NODE_IDS.has(nodeData?.display_name) ||
+    PROMPT_NODE_IDS.has(nodeData?.node_id)
   );
 }
 
@@ -168,6 +182,78 @@ function notifySuccess(message) {
   }
 }
 
+function fitNodeToWidgets(node) {
+  if (typeof node.computeSize !== "function" || typeof node.setSize !== "function") {
+    return;
+  }
+
+  const computed = node.computeSize();
+  if (!Array.isArray(computed) || computed.length < 2) {
+    return;
+  }
+
+  const width = Math.max(node.size?.[0] ?? 0, computed[0] ?? 0);
+  const height = Math.max(node.size?.[1] ?? 0, computed[1] ?? 0);
+  node.setSize([width, height]);
+  node.setDirtyCanvas?.(true, true);
+  node.graph?.setDirtyCanvas?.(true, true);
+}
+
+function makeTextareaResizable(node, widgetName) {
+  const widget = getWidget(node, widgetName);
+  if (!widget || widget.__lmstudioResizableApplied) {
+    return;
+  }
+
+  const textarea = widget.inputEl;
+  if (!textarea || textarea.tagName !== "TEXTAREA") {
+    return;
+  }
+
+  textarea.style.resize = "vertical";
+  textarea.style.overflowY = "auto";
+  if (!textarea.style.minHeight) {
+    textarea.style.minHeight = "92px";
+  }
+
+  if (typeof widget.computeSize === "function" && !widget.__lmstudioWrappedComputeSize) {
+    const baseComputeSize = widget.computeSize.bind(widget);
+    widget.computeSize = (width) => {
+      const size = baseComputeSize(width);
+      const fallback = Array.isArray(size) ? size : [0, 0];
+      const dynamicHeight = Math.max(fallback[1] || 0, (textarea.offsetHeight || 0) + 10);
+      return [fallback[0] || 0, dynamicHeight];
+    };
+    widget.__lmstudioWrappedComputeSize = true;
+  }
+
+  const onResizeOrInput = () => fitNodeToWidgets(node);
+  textarea.addEventListener("input", onResizeOrInput);
+  textarea.addEventListener("mouseup", onResizeOrInput);
+
+  widget.__lmstudioResizableApplied = true;
+}
+
+function attachResizablePromptWidgets(node) {
+  if (node.__lmstudioPromptResizeAttached) {
+    return;
+  }
+
+  // Widgets may not be fully mounted at the first tick.
+  const tryAttach = () => {
+    makeTextareaResizable(node, "system_prompt");
+    makeTextareaResizable(node, "user_prompt");
+    fitNodeToWidgets(node);
+  };
+
+  tryAttach();
+  setTimeout(tryAttach, 0);
+  setTimeout(tryAttach, 120);
+  setTimeout(tryAttach, 300);
+
+  node.__lmstudioPromptResizeAttached = true;
+}
+
 function attachButtons(node) {
   if (node.__lmstudioButtonsAttached) {
     return;
@@ -218,21 +304,33 @@ function attachButtons(node) {
 app.registerExtension({
   name: "lmstudio.connect.node",
   async beforeRegisterNodeDef(nodeType, nodeData) {
-    if (!isConnectNodeDefinition(nodeData)) {
-      return;
+    if (isConnectNodeDefinition(nodeData)) {
+      const onNodeCreated = nodeType.prototype.onNodeCreated;
+      nodeType.prototype.onNodeCreated = function () {
+        onNodeCreated?.apply(this, arguments);
+        attachButtons(this);
+      };
+
+      const onConfigure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function () {
+        onConfigure?.apply(this, arguments);
+        ensureModelDropdown(this);
+        syncDropdownFromText(this);
+      };
     }
 
-    const onNodeCreated = nodeType.prototype.onNodeCreated;
-    nodeType.prototype.onNodeCreated = function () {
-      onNodeCreated?.apply(this, arguments);
-      attachButtons(this);
-    };
+    if (isPromptNodeDefinition(nodeData)) {
+      const onNodeCreated = nodeType.prototype.onNodeCreated;
+      nodeType.prototype.onNodeCreated = function () {
+        onNodeCreated?.apply(this, arguments);
+        attachResizablePromptWidgets(this);
+      };
 
-    const onConfigure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function () {
-      onConfigure?.apply(this, arguments);
-      ensureModelDropdown(this);
-      syncDropdownFromText(this);
-    };
+      const onConfigure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function () {
+        onConfigure?.apply(this, arguments);
+        attachResizablePromptWidgets(this);
+      };
+    }
   },
 });
