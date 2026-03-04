@@ -37,7 +37,6 @@ class LMStudioConnect(io.ComfyNode):
                     id="api_token",
                     display_name="API Token",
                     default="-",
-                    optional=True,
                     placeholder="Leave '-' for lm-studio",
                     tooltip="Bearer token for LMStudio OpenAI-compatible API.",
                 ),

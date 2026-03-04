@@ -76,6 +76,14 @@ function ensureModelDropdown(node) {
     { values: initialValues }
   );
 
+  // Keep visible ordering aligned with backend schema: insert combo at the original model slot position.
+  const modelIndex = node.widgets?.indexOf(modelTextWidget) ?? -1;
+  const comboIndex = node.widgets?.indexOf(comboWidget) ?? -1;
+  if (modelIndex >= 0 && comboIndex >= 0 && comboIndex !== modelIndex) {
+    node.widgets.splice(comboIndex, 1);
+    node.widgets.splice(modelIndex, 0, comboWidget);
+  }
+
   node.__lmstudioModelDropdown = comboWidget;
   node.__lmstudioModelTextWidget = modelTextWidget;
 
