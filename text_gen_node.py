@@ -148,8 +148,7 @@ class LMStudioTextGen(io.ComfyNode):
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")
 
-        if connection.reasoning_enabled:
-            text = strip_think_content(text)
+        text = strip_think_content(text)
 
         status = f"Model '{connection.model}' via {via_endpoint} (seed={resolved_seed})."
         if fallback_reason:

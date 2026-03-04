@@ -12,6 +12,7 @@ from .client import (
     extract_chat_completion_text,
     extract_responses_text,
     resolve_request_seed,
+    strip_think_content,
 )
 from .iotypes import ParamConnection
 from .models import LMStudioConnectionPayload
@@ -189,6 +190,8 @@ class LMStudioImageToText(io.ComfyNode):
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")
             raw_response = dump_openai_response(completion)
+
+        text = strip_think_content(text)
 
         status = f"Model '{connection.model}' via {via_endpoint} (seed={resolved_seed})."
         if fallback_reason:
