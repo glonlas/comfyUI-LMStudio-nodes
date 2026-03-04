@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import math
+import re
 import secrets
 from io import BytesIO
 from typing import Any, TYPE_CHECKING
@@ -266,6 +267,23 @@ def dump_openai_response(response: Any) -> str:
     if isinstance(response, dict):
         return json.dumps(response, indent=2, default=str)
     return str(response)
+
+
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
+_THINK_START_RE = re.compile(r"<think>.*$", flags=re.IGNORECASE | re.DOTALL)
+
+
+def strip_think_content(text: str | None) -> str:
+    """
+    Remove reasoning blocks enclosed in <think>...</think>.
+    Also removes dangling <think> blocks without a closing tag.
+    """
+    if not text:
+        return ""
+
+    cleaned = _THINK_BLOCK_RE.sub("", text)
+    cleaned = _THINK_START_RE.sub("", cleaned)
+    return cleaned.strip()
 
 
 def build_chat_messages(system_prompt: str | None, user_prompt: str | None) -> list[dict[str, Any]]:

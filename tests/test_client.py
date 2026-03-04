@@ -47,3 +47,13 @@ def test_build_responses_input_text_shape() -> None:
 def test_build_chat_messages_handles_none_prompts() -> None:
     messages = client.build_chat_messages(None, None)
     assert messages == [{"role": "user", "content": ""}]
+
+
+def test_strip_think_content_removes_reasoning_blocks() -> None:
+    text = "Final answer\\n<think>internal chain of thought</think>\\nVisible output"
+    assert client.strip_think_content(text) == "Final answer\\n\\nVisible output"
+
+
+def test_strip_think_content_removes_dangling_start_tag() -> None:
+    text = "Visible output\\n<think>unfinished"
+    assert client.strip_think_content(text) == "Visible output"
