@@ -51,19 +51,22 @@ class LMStudioConnect(io.ComfyNode):
                 ),
                 io.Boolean.Input(
                     id="reasoning_enabled",
-                    display_name="Enable Reasoning",
+                    display_name="Enable Reasonning",
                     default=False,
                     tooltip="Enable model reasoning hints when using the responses endpoint.",
                 ),
                 io.Boolean.Input(
-                    id="test_connectivity",
-                    display_name="Test Connectivity On Execute",
-                    default=True,
-                    tooltip="When enabled, validate server reachability and model availability during execution.",
+                    id="use_tooling_mcp",
+                    display_name="Use Tooling / MCP",
+                    default=False,
+                    tooltip=(
+                        "Expose intent to use MCP tooling. Useful only when your target model/session is configured "
+                        "for tool-enabled responses."
+                    ),
                 ),
                 io.Int.Input(
                     id="max_tokens",
-                    display_name="Max Tokens",
+                    display_name="Max Token",
                     default=DEFAULT_MAX_TOKENS,
                     min=1,
                     max=1_000_000,
@@ -82,7 +85,7 @@ class LMStudioConnect(io.ComfyNode):
                 ),
                 io.Int.Input(
                     id="timeout_seconds",
-                    display_name="Timeout (seconds)",
+                    display_name="Connection Timeout (seconds)",
                     default=DEFAULT_TIMEOUT_SECONDS,
                     min=1,
                     max=3600,
@@ -90,13 +93,10 @@ class LMStudioConnect(io.ComfyNode):
                     advanced=True,
                 ),
                 io.Boolean.Input(
-                    id="use_tooling_mcp",
-                    display_name="Use Tooling / MCP",
-                    default=False,
-                    tooltip=(
-                        "Expose intent to use MCP tooling. Useful only when your target model/session is configured "
-                        "for tool-enabled responses."
-                    ),
+                    id="test_connectivity",
+                    display_name="Test Connectivity On Execute",
+                    default=True,
+                    tooltip="When enabled, validate server reachability and model availability during execution.",
                     advanced=True,
                 ),
             ],
