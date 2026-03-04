@@ -25,10 +25,15 @@ def test_coerce_seed_supported_values(value, expected) -> None:
     assert client.coerce_seed(value) == expected
 
 
-@pytest.mark.parametrize("value", ["", [], [1, 2], "abc", float("nan")])
+@pytest.mark.parametrize("value", [[], [1, 2], "abc", float("nan")])
 def test_coerce_seed_invalid_values(value) -> None:
     with pytest.raises(ValueError):
         client.coerce_seed(value)
+
+
+def test_coerce_seed_empty_string_returns_none() -> None:
+    # Empty string is treated as "no seed provided" → None → random seed downstream.
+    assert client.coerce_seed("") is None
 
 
 def test_resolve_request_seed_negative_one_generates_positive_seed() -> None:
@@ -50,10 +55,12 @@ def test_build_chat_messages_handles_none_prompts() -> None:
 
 
 def test_strip_think_content_removes_reasoning_blocks() -> None:
-    text = "Final answer\\n<think>internal chain of thought</think>\\nVisible output"
-    assert client.strip_think_content(text) == "Final answer\\n\\nVisible output"
+    # Use real newlines — as actual LLM output would contain.
+    text = "Final answer\n<think>internal chain of thought</think>\nVisible output"
+    assert client.strip_think_content(text) == "Final answer\n\nVisible output"
 
 
 def test_strip_think_content_removes_dangling_start_tag() -> None:
-    text = "Visible output\\n<think>unfinished"
+    # strip() removes the trailing real newline left after the dangling block is excised.
+    text = "Visible output\n<think>unfinished"
     assert client.strip_think_content(text) == "Visible output"
