@@ -42,3 +42,8 @@ def test_build_responses_input_text_shape() -> None:
     assert payload[0]["role"] == "user"
     assert payload[0]["content"][0]["type"] == "input_text"
     assert payload[0]["content"][0]["text"] == "hello"
+
+
+def test_build_chat_messages_handles_none_prompts() -> None:
+    messages = client.build_chat_messages(None, None)
+    assert messages == [{"role": "user", "content": ""}]

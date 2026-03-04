@@ -166,24 +166,26 @@ def comfy_image_to_base64_png_url(image_tensor) -> str:
     return f"data:image/png;base64,{b64_png}"
 
 
-def build_responses_input_text(user_prompt: str) -> list[dict[str, Any]]:
+def build_responses_input_text(user_prompt: str | None) -> list[dict[str, Any]]:
+    prompt_text = user_prompt or ""
     return [
         {
             "role": "user",
-            "content": [{"type": "input_text", "text": user_prompt}],
+            "content": [{"type": "input_text", "text": prompt_text}],
         }
     ]
 
 
 def build_responses_input_with_image(
-    user_prompt: str,
+    user_prompt: str | None,
     image_data_url: str,
 ) -> list[dict[str, Any]]:
+    prompt_text = user_prompt or ""
     return [
         {
             "role": "user",
             "content": [
-                {"type": "input_text", "text": user_prompt},
+                {"type": "input_text", "text": prompt_text},
                 {"type": "input_image", "image_url": image_data_url},
             ],
         }
@@ -266,27 +268,31 @@ def dump_openai_response(response: Any) -> str:
     return str(response)
 
 
-def build_chat_messages(system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
+def build_chat_messages(system_prompt: str | None, user_prompt: str | None) -> list[dict[str, Any]]:
+    system_text = system_prompt or ""
+    user_text = user_prompt or ""
     messages: list[dict[str, Any]] = []
-    if system_prompt.strip():
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": user_prompt})
+    if system_text.strip():
+        messages.append({"role": "system", "content": system_text})
+    messages.append({"role": "user", "content": user_text})
     return messages
 
 
 def build_chat_messages_with_image(
-    system_prompt: str,
-    user_prompt: str,
+    system_prompt: str | None,
+    user_prompt: str | None,
     image_data_url: str,
 ) -> list[dict[str, Any]]:
+    system_text = system_prompt or ""
+    user_text = user_prompt or ""
     messages: list[dict[str, Any]] = []
-    if system_prompt.strip():
-        messages.append({"role": "system", "content": system_prompt})
+    if system_text.strip():
+        messages.append({"role": "system", "content": system_text})
     messages.append(
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": user_prompt},
+                {"type": "text", "text": user_text},
                 {"type": "image_url", "image_url": {"url": image_data_url}},
             ],
         }

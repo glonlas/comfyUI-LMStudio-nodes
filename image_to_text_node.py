@@ -81,7 +81,8 @@ class LMStudioImageToText(io.ComfyNode):
 
     @classmethod
     def validate_inputs(cls, user_prompt: str) -> bool | str:
-        if not user_prompt.strip():
+        prompt_text = (user_prompt or "")
+        if not prompt_text.strip():
             return "user_prompt must not be empty"
         return True
 
@@ -138,6 +139,9 @@ class LMStudioImageToText(io.ComfyNode):
         user_prompt: str,
         seed: int,
     ) -> io.NodeOutput:
+        system_prompt = system_prompt or ""
+        user_prompt = user_prompt or ""
+
         resolved_seed = resolve_request_seed(seed)
         client = create_openai_client(
             server_url=connection.server_url,
