@@ -159,7 +159,9 @@ class LMStudioImageToText(io.ComfyNode):
             via_endpoint = "chat.completions"
             fallback_reason = str(responses_error)
 
-            first_image = image[0] if getattr(image, "ndim", 0) == 4 else image
+            is_batch = getattr(image, "ndim", 0) == 4
+            batch_size = image.shape[0] if is_batch else 1
+            first_image = image[0] if is_batch else image
             image_data_url = comfy_image_to_base64_png_url(first_image)
 
             completion = client.chat.completions.create(
@@ -177,6 +179,12 @@ class LMStudioImageToText(io.ComfyNode):
             text = extract_chat_completion_text(completion).strip()
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")
+
+            if batch_size > 1:
+                fallback_reason += (
+                    f" Note: chat.completions fallback only supports one image; "
+                    f"{batch_size - 1} additional frame(s) were dropped."
+                )
 
         text = strip_think_content(text)
 
