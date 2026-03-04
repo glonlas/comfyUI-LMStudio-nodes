@@ -33,6 +33,14 @@ Small ComfyUI custom nodes to connect to a remote LMStudio server through OpenAI
    ```
 3. Restart ComfyUI
 
+## Testing
+
+Run the Python unit tests with coverage gate (`>=90%`):
+
+```bash
+pytest -q
+```
+
 ## Notes
 
 - This is **not** an official LMStudio project.
