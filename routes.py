@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiohttp import web
 from server import PromptServer
 
-from .client import DEFAULT_TIMEOUT_SECONDS, get_server_models, normalize_server_url
+from .client import get_server_models, normalize_server_url
 
 
 _ROUTES_REGISTERED = False
@@ -60,7 +60,9 @@ async def _test_handler(request: web.Request) -> web.Response:
     api_token = (request.query.get("api_token") or "-").strip() or "-"
 
     try:
-        timeout_seconds = _query_int(request, "timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
+        # Use the same short default as _models_handler; the JS always sends the
+        # widget value anyway, so this only matters when the endpoint is called directly.
+        timeout_seconds = _query_int(request, "timeout_seconds", 15)
         normalized_url = normalize_server_url(server_url)
         models = get_server_models(
             server_url=normalized_url,

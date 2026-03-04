@@ -8,6 +8,7 @@ from .client import (
     DEFAULT_TIMEOUT_SECONDS,
     MODEL_PLACEHOLDER,
     get_server_models,
+    normalize_api_key,
     normalize_server_url,
 )
 from .iotypes import ParamConnection
@@ -50,7 +51,7 @@ class LMStudioConnect(io.ComfyNode):
                 ),
                 io.Boolean.Input(
                     id="reasoning_enabled",
-                    display_name="Enable Reasonning",
+                    display_name="Enable Reasoning",
                     default=False,
                     tooltip="Enable model reasoning hints when using the responses endpoint.",
                 ),
@@ -168,7 +169,7 @@ class LMStudioConnect(io.ComfyNode):
         payload = LMStudioConnectionPayload(
             server_url=normalized_server_url,
             base_url=f"{normalized_server_url}/v1",
-            api_key=(api_token or "-").strip() or "-",
+            api_key=normalize_api_key(api_token),
             model=model_name,
             reasoning_enabled=reasoning_enabled,
             max_tokens=max_tokens,

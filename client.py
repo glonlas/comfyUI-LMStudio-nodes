@@ -177,22 +177,6 @@ def build_responses_input_text(user_prompt: str | None) -> list[dict[str, Any]]:
     ]
 
 
-def build_responses_input_with_image(
-    user_prompt: str | None,
-    image_data_url: str,
-) -> list[dict[str, Any]]:
-    prompt_text = user_prompt or ""
-    return [
-        {
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": prompt_text},
-                {"type": "input_image", "image_url": image_data_url},
-            ],
-        }
-    ]
-
-
 def extract_chat_completion_text(completion: Any) -> str:
     choices = getattr(completion, "choices", None) or []
     if not choices:
