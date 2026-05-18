@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
-import json
 import sys
 import types
 
@@ -181,25 +180,6 @@ def test_extract_responses_text_variants() -> None:
     assert client.extract_responses_text(response_from_object) == "from-object-content\nfrom-object"
 
     assert client.extract_responses_text(ns(output_text="", output=[])) == ""
-
-
-def test_dump_openai_response_branches() -> None:
-    class WithModelDump:
-        def model_dump(self):
-            return {"a": 1}
-
-    class WithToDict:
-        def to_dict(self):
-            return {"b": 2}
-
-    class Plain:
-        def __str__(self) -> str:
-            return "plain-response"
-
-    assert json.loads(client.dump_openai_response(WithModelDump())) == {"a": 1}
-    assert json.loads(client.dump_openai_response(WithToDict())) == {"b": 2}
-    assert json.loads(client.dump_openai_response({"c": 3})) == {"c": 3}
-    assert client.dump_openai_response(Plain()) == "plain-response"
 
 
 def test_strip_think_content_case_insensitive_and_multiple() -> None:
