@@ -22,7 +22,15 @@ def _query_int(request: web.Request, key: str, default: int) -> int:
     return value
 
 
-async def _models_handler(request: web.Request) -> web.Response:
+async def _probe_server(
+    request: web.Request, *, error_prefix: str
+) -> tuple[str, list[str]] | web.Response:
+    """Shared work for the models/test endpoints.
+
+    Returns either an error ``web.Response`` (to be returned directly by the
+    caller) or a ``(normalized_url, models)`` tuple for the caller to format
+    into a success response.
+    """
     server_url = (request.query.get("server_url") or "").strip()
     api_token = (request.query.get("api_token") or "-").strip() or "-"
 
@@ -40,10 +48,19 @@ async def _models_handler(request: web.Request) -> web.Response:
         return web.json_response(
             {
                 "ok": False,
-                "error": f"Failed to list models from LMStudio: {exc}",
+                "error": f"{error_prefix}: {exc}",
             },
             status=502,
         )
+
+    return normalized_url, models
+
+
+async def _models_handler(request: web.Request) -> web.Response:
+    result = await _probe_server(request, error_prefix="Failed to list models from LMStudio")
+    if isinstance(result, web.Response):
+        return result
+    normalized_url, models = result
 
     return web.json_response(
         {
@@ -56,29 +73,12 @@ async def _models_handler(request: web.Request) -> web.Response:
 
 
 async def _test_handler(request: web.Request) -> web.Response:
-    server_url = (request.query.get("server_url") or "").strip()
-    api_token = (request.query.get("api_token") or "-").strip() or "-"
-
-    try:
-        # Use the same short default as _models_handler; the JS always sends the
-        # widget value anyway, so this only matters when the endpoint is called directly.
-        timeout_seconds = _query_int(request, "timeout_seconds", 15)
-        normalized_url = normalize_server_url(server_url)
-        models = get_server_models(
-            server_url=normalized_url,
-            api_key=api_token,
-            timeout_seconds=timeout_seconds,
-        )
-    except ValueError as exc:
-        return web.json_response({"ok": False, "error": str(exc)}, status=400)
-    except Exception as exc:
-        return web.json_response(
-            {
-                "ok": False,
-                "error": f"Connection test failed: {exc}",
-            },
-            status=502,
-        )
+    # The JS always sends the widget value, so the default only matters when the
+    # endpoint is called directly; keep it aligned with ``_models_handler``.
+    result = await _probe_server(request, error_prefix="Connection test failed")
+    if isinstance(result, web.Response):
+        return result
+    normalized_url, models = result
 
     return web.json_response(
         {
