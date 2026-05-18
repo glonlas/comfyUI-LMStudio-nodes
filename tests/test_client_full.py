@@ -36,6 +36,20 @@ def test_to_openai_base_url_appends_v1() -> None:
 @pytest.mark.parametrize(
     "value,expected",
     [
+        ("https://host/v1", "https://host"),
+        ("https://host/V1", "https://host"),
+        ("https://host/V1/", "https://host"),
+        ("https://host", "https://host"),
+    ],
+)
+def test_normalize_server_url_strips_v1_case_insensitively(value: str, expected: str) -> None:
+    assert client.normalize_server_url(value) == expected
+    assert client.to_openai_base_url(value) == f"{expected}/v1"
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
         (None, "lm-studio"),
         ("", "lm-studio"),
         ("  ", "lm-studio"),
