@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from comfy_api.latest import io, ui
@@ -15,6 +16,8 @@ from .client import (
 )
 from .iotypes import ParamConnection
 from .models import LMStudioConnectionPayload
+
+_logger = logging.getLogger(__name__)
 
 
 class LMStudioImageToText(io.ComfyNode):
@@ -181,6 +184,11 @@ class LMStudioImageToText(io.ComfyNode):
                 raise ValueError("chat.completions fallback returned no text output")
 
             if batch_size > 1:
+                _logger.warning(
+                    "LMStudio image_to_text chat.completions fallback only supports "
+                    "one image; %d additional frame(s) were dropped.",
+                    batch_size - 1,
+                )
                 fallback_reason += (
                     f" Note: chat.completions fallback only supports one image; "
                     f"{batch_size - 1} additional frame(s) were dropped."
