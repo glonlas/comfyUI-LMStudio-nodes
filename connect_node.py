@@ -31,7 +31,7 @@ class LMStudioConnect(io.ComfyNode):
                     id="server_url",
                     display_name="Server URL",
                     default="http://127.0.0.1:1234",
-                    placeholder="http://10.168.168.7:1234",
+                    placeholder="http://192.0.2.10:1234",
                     tooltip="LMStudio server URL (without /v1).",
                 ),
                 io.String.Input(
