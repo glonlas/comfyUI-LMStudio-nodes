@@ -37,7 +37,7 @@ def normalize_server_url(server_url: str) -> str:
 
     # Ensure no trailing slash and no duplicate /v1.
     value = value.rstrip("/")
-    if value.endswith("/v1"):
+    if value.lower().endswith("/v1"):
         value = value[:-3]
     return value
 
