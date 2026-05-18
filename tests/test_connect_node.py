@@ -49,6 +49,27 @@ def test_validate_inputs() -> None:
     assert cls.validate_inputs("http://127.0.0.1:1234", 10, 0) == "max_tokens must be >= 1"
 
 
+def test_validate_inputs_accepts_extra_kwargs() -> None:
+    connect_node = _connect_module()
+    cls = connect_node.LMStudioConnect
+
+    # ComfyUI may pass any of the schema inputs by name; the method must tolerate them.
+    assert (
+        cls.validate_inputs(
+            "http://127.0.0.1:1234",
+            10,
+            128,
+            api_token="-",
+            model="placeholder",
+            reasoning_enabled=False,
+            use_tooling_mcp=False,
+            temperature=0.7,
+            test_connectivity=True,
+        )
+        is True
+    )
+
+
 def test_execute_with_placeholder_model_uses_discovered_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
