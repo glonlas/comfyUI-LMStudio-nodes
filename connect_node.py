@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from comfy_api.latest import io, ui
 
 from .client import (
@@ -115,7 +117,13 @@ class LMStudioConnect(io.ComfyNode):
         )
 
     @classmethod
-    def validate_inputs(cls, server_url: str, timeout_seconds: int, max_tokens: int) -> bool | str:
+    def validate_inputs(
+        cls,
+        server_url: str,
+        timeout_seconds: int,
+        max_tokens: int,
+        **_: Any,
+    ) -> bool | str:
         try:
             normalize_server_url(server_url)
         except ValueError as exc:
