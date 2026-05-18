@@ -190,6 +190,19 @@ function notifySuccess(message) {
   }
 }
 
+function notifyError(message) {
+  if (typeof app.extensionManager?.toast?.add === "function") {
+    app.extensionManager.toast.add({
+      severity: "error",
+      summary: "LMStudio",
+      detail: message,
+      life: 5000,
+    });
+  } else {
+    console.error(`[LMStudio] ${message}`);
+  }
+}
+
 function fitNodeToWidgets(node) {
   if (typeof node.computeSize !== "function" || typeof node.setSize !== "function") {
     return;
@@ -292,7 +305,7 @@ function attachButtons(node) {
     } catch (error) {
       const message = error?.message || String(error);
       console.error("[LMStudio] Model refresh failed", error);
-      window.alert(`Model refresh failed: ${message}`);
+      notifyError(`Model refresh failed: ${message}`);
     }
   });
 
@@ -302,7 +315,7 @@ function attachButtons(node) {
     } catch (error) {
       const message = error?.message || String(error);
       console.error("[LMStudio] Connectivity test failed", error);
-      window.alert(`Connectivity test failed: ${message}`);
+      notifyError(`Connectivity test failed: ${message}`);
     }
   });
 
