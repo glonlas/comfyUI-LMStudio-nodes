@@ -6,7 +6,7 @@ import client
 
 
 def test_normalize_server_url_trims_and_strips_v1() -> None:
-    assert client.normalize_server_url(" http://10.168.168.7:1234/v1/ ") == "http://10.168.168.7:1234"
+    assert client.normalize_server_url(" http://192.0.2.10:1234/v1/ ") == "http://192.0.2.10:1234"
 
 
 @pytest.mark.parametrize(
