@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import math
 import re
 import secrets
@@ -241,16 +240,6 @@ def extract_responses_text(response: Any) -> str:
             return "\n".join(parts)
 
     return ""
-
-
-def dump_openai_response(response: Any) -> str:
-    if hasattr(response, "model_dump"):
-        return json.dumps(response.model_dump(), indent=2, default=str)
-    if hasattr(response, "to_dict"):
-        return json.dumps(response.to_dict(), indent=2, default=str)
-    if isinstance(response, dict):
-        return json.dumps(response, indent=2, default=str)
-    return str(response)
 
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
