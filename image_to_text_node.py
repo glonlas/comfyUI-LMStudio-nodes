@@ -167,21 +167,27 @@ class LMStudioImageToText(io.ComfyNode):
             first_image = image[0] if is_batch else image
             image_data_url = comfy_image_to_base64_png_url(first_image)
 
-            completion = client.chat.completions.create(
-                model=connection.model,
-                messages=build_chat_messages_with_image(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    image_data_url=image_data_url,
-                ),
-                seed=resolved_seed,
-                temperature=connection.temperature,
-                max_tokens=connection.max_tokens,
-                n=1,
-            )
-            text = extract_chat_completion_text(completion).strip()
-            if not text:
-                raise ValueError("chat.completions fallback returned no text output")
+            try:
+                completion = client.chat.completions.create(
+                    model=connection.model,
+                    messages=build_chat_messages_with_image(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        image_data_url=image_data_url,
+                    ),
+                    seed=resolved_seed,
+                    temperature=connection.temperature,
+                    max_tokens=connection.max_tokens,
+                    n=1,
+                )
+                text = extract_chat_completion_text(completion).strip()
+                if not text:
+                    raise ValueError("chat.completions fallback returned no text output")
+            except Exception as chat_error:
+                raise RuntimeError(
+                    f"Both endpoints failed. responses error: {fallback_reason}. "
+                    f"chat.completions error: {chat_error}"
+                ) from chat_error
 
             if batch_size > 1:
                 _logger.warning(

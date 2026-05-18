@@ -136,17 +136,23 @@ class LMStudioTextGen(io.ComfyNode):
             via_endpoint = "chat.completions"
             fallback_reason = str(responses_error)
 
-            completion = client.chat.completions.create(
-                model=connection.model,
-                messages=build_chat_messages(system_prompt, user_prompt),
-                seed=resolved_seed,
-                temperature=connection.temperature,
-                max_tokens=connection.max_tokens,
-                n=1,
-            )
-            text = extract_chat_completion_text(completion).strip()
-            if not text:
-                raise ValueError("chat.completions fallback returned no text output")
+            try:
+                completion = client.chat.completions.create(
+                    model=connection.model,
+                    messages=build_chat_messages(system_prompt, user_prompt),
+                    seed=resolved_seed,
+                    temperature=connection.temperature,
+                    max_tokens=connection.max_tokens,
+                    n=1,
+                )
+                text = extract_chat_completion_text(completion).strip()
+                if not text:
+                    raise ValueError("chat.completions fallback returned no text output")
+            except Exception as chat_error:
+                raise RuntimeError(
+                    f"Both endpoints failed. responses error: {fallback_reason}. "
+                    f"chat.completions error: {chat_error}"
+                ) from chat_error
 
         text = strip_think_content(text)
 

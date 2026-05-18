@@ -161,10 +161,50 @@ def test_execute_raises_if_both_endpoints_return_no_text(
     monkeypatch.setattr(text_gen_node, "create_openai_client", lambda **_: fake_client)
     monkeypatch.setattr(text_gen_node, "resolve_request_seed", lambda _: 55)
 
-    with pytest.raises(ValueError, match="chat\\.completions fallback returned no text output"):
+    with pytest.raises(RuntimeError) as exc_info:
         text_gen_node.LMStudioTextGen.execute(
             connection=_connection_payload(),
             system_prompt="sys",
             user_prompt="hello",
             seed=1,
         )
+
+    message = str(exc_info.value)
+    assert "Both endpoints failed" in message
+    assert "responses endpoint returned no text output" in message
+    assert "chat.completions fallback returned no text output" in message
+
+
+def test_execute_chains_both_errors_when_chat_completions_also_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    text_gen_node = _text_module()
+
+    def raise_responses(**kwargs):
+        raise RuntimeError("responses boom")
+
+    def raise_chat(**kwargs):
+        raise RuntimeError("chat boom")
+
+    fake_client = SimpleNamespace(
+        responses=SimpleNamespace(create=raise_responses),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=raise_chat)),
+    )
+
+    monkeypatch.setattr(text_gen_node, "create_openai_client", lambda **_: fake_client)
+    monkeypatch.setattr(text_gen_node, "resolve_request_seed", lambda _: 55)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        text_gen_node.LMStudioTextGen.execute(
+            connection=_connection_payload(),
+            system_prompt="sys",
+            user_prompt="hello",
+            seed=1,
+        )
+
+    message = str(exc_info.value)
+    assert "Both endpoints failed" in message
+    assert "responses boom" in message
+    assert "chat boom" in message
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert str(exc_info.value.__cause__) == "chat boom"

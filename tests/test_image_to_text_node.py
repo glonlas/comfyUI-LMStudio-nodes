@@ -158,3 +158,41 @@ def test_execute_chat_fallback_reports_dropped_frames(
     assert "via chat.completions" in output.ui.text
     assert "responses unavailable" in output.ui.text
     assert "additional frame(s) were dropped" in output.ui.text
+
+
+def test_execute_chains_both_errors_when_chat_completions_also_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_node = _image_module()
+
+    def raise_responses(**kwargs):
+        raise RuntimeError("responses boom")
+
+    def raise_chat(**kwargs):
+        raise RuntimeError("chat boom")
+
+    fake_client = SimpleNamespace(
+        responses=SimpleNamespace(create=raise_responses),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=raise_chat)),
+    )
+    monkeypatch.setattr(image_node, "resolve_request_seed", lambda _: 41)
+    monkeypatch.setattr(image_node, "create_openai_client", lambda **_: fake_client)
+    monkeypatch.setattr(
+        image_node, "comfy_image_to_base64_png_url", lambda _img: "data:image/png;base64,xxx"
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        image_node.LMStudioImageToText.execute(
+            connection=_connection_payload(),
+            image=_single_image(),
+            system_prompt="sys",
+            user_prompt="describe",
+            seed=0,
+        )
+
+    message = str(exc_info.value)
+    assert "Both endpoints failed" in message
+    assert "responses boom" in message
+    assert "chat boom" in message
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert str(exc_info.value.__cause__) == "chat boom"
