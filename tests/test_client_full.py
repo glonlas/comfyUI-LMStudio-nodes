@@ -183,6 +183,19 @@ def test_extract_responses_text_variants() -> None:
     assert client.extract_responses_text(ns(output_text="", output=[])) == ""
 
 
+def test_extract_responses_text_no_duplicate_when_item_has_content_and_text() -> None:
+    # An output item that has BOTH a content list and a top-level text attribute
+    # should only yield text from the content list; the item-level text field
+    # must NOT be appended a second time (regression guard for the duplicate-text bug).
+    item_with_both = ns(content=[ns(text="the-answer")], text="the-answer")
+    response = ns(output=[item_with_both])
+    result = client.extract_responses_text(response)
+    assert result == "the-answer", (
+        f"Expected 'the-answer' but got {result!r} — "
+        "item.text was appended even though content was already processed"
+    )
+
+
 def test_dump_openai_response_branches() -> None:
     class WithModelDump:
         def model_dump(self):
