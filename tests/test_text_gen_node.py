@@ -168,3 +168,38 @@ def test_execute_raises_if_both_endpoints_return_no_text(
             user_prompt="hello",
             seed=1,
         )
+
+
+def test_execute_raises_when_all_text_is_think_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Regression: when the model returns only <think> content (no visible text),
+    strip_think_content reduces the response to "". The node must raise
+    ValueError rather than silently returning an empty string.
+    """
+    text_gen_node = _text_module()
+
+    fake_client = SimpleNamespace(
+        responses=SimpleNamespace(
+            create=lambda **_: SimpleNamespace(output_text="<think>internal only</think>")
+        ),
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **_: (_ for _ in ()).throw(
+                    AssertionError("chat fallback should not run")
+                )
+            )
+        ),
+    )
+
+    monkeypatch.setattr(text_gen_node, "resolve_request_seed", lambda _: 1)
+    monkeypatch.setattr(text_gen_node, "create_openai_client", lambda **_: fake_client)
+
+    with pytest.raises(ValueError, match="All content was inside <think> blocks"):
+        text_gen_node.LMStudioTextGen.execute(
+            connection=_connection_payload(),
+            system_prompt="sys",
+            user_prompt="hello",
+            seed=1,
+        )

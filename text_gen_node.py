@@ -149,6 +149,10 @@ class LMStudioTextGen(io.ComfyNode):
                 raise ValueError("chat.completions fallback returned no text output")
 
         text = strip_think_content(text)
+        if not text:
+            raise ValueError(
+                "All content was inside <think> blocks; no visible text was produced."
+            )
 
         status = f"Model '{connection.model}' via {via_endpoint} (seed={resolved_seed})."
         if fallback_reason:
