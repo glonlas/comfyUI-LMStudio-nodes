@@ -196,6 +196,36 @@ def test_extract_responses_text_no_duplicate_when_item_has_content_and_text() ->
 
 
 
+def test_extract_responses_text_dict_item_non_list_content_is_skipped() -> None:
+    # Branch 221->227: dict item where "content" is not a list.
+    # The function should skip it (continue) and return empty string — not crash.
+    response = ns(output=[{"content": "not-a-list"}, {"content": {"nested": "dict"}}])
+    assert client.extract_responses_text(response) == ""
+
+
+def test_extract_responses_text_dict_item_content_list_with_non_dict_entries() -> None:
+    # Branch 223->222: content list contains non-dict entries (e.g. plain strings).
+    # Those entries must be silently ignored; only dict entries with a str "text" key count.
+    response = ns(output=[{"content": ["string-entry", 42, None, {"text": "kept"}]}])
+    assert client.extract_responses_text(response) == "kept"
+
+
+def test_extract_responses_text_dict_item_content_entry_text_non_string() -> None:
+    # Branch 225->222: content entry is a dict but "text" value is not a str.
+    # These entries must be silently ignored.
+    response = ns(output=[{"content": [{"text": 42}, {"text": None}, {"text": "good"}]}])
+    assert client.extract_responses_text(response) == "good"
+
+
+def test_extract_responses_text_object_item_content_entry_text_non_string() -> None:
+    # Branch 233->231: object item with content list where getattr(entry, "text") is not a str.
+    # The entry should be skipped; other valid entries should still be collected.
+    bad_entry = ns(text=99)
+    good_entry = ns(text="valid")
+    response = ns(output=[ns(content=[bad_entry, good_entry])])
+    assert client.extract_responses_text(response) == "valid"
+
+
 def test_strip_think_content_case_insensitive_and_multiple() -> None:
     text = "A\n<THINK>hidden-1</THINK>\nB\n<think>hidden-2</think>\nC"
     assert client.strip_think_content(text) == "A\n\nB\n\nC"
