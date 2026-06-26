@@ -14,14 +14,6 @@ def make_chat_completion(content: Any) -> SimpleNamespace:
     return ns(choices=[ns(message=ns(content=content))])
 
 
-def make_response_with_output_text(text: str) -> SimpleNamespace:
-    return ns(output_text=text)
-
-
-def make_response_with_output_items(*items: Any) -> SimpleNamespace:
-    return ns(output=list(items))
-
-
 class FakeTensor:
     def __init__(self, array: np.ndarray):
         self._array = np.asarray(array, dtype=np.float32)
