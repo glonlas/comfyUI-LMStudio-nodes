@@ -164,18 +164,6 @@ def _single_image() -> FakeTensor:
     return FakeTensor(np.array([[[1.0, 0.0, 0.0]]], dtype=np.float32))
 
 
-def _batch_image() -> FakeTensor:
-    return FakeTensor(
-        np.array(
-            [
-                [[[1.0, 0.0, 0.0]]],
-                [[[0.0, 0.0, 1.0]]],
-            ],
-            dtype=np.float32,
-        )
-    )
-
-
 def test_responses_kwargs_no_system_prompt_omits_instructions() -> None:
     """
     When system_prompt is blank the 'instructions' key must NOT appear in
