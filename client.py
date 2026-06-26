@@ -233,9 +233,10 @@ def extract_responses_text(response: Any) -> str:
                     text = getattr(entry, "text", None)
                     if isinstance(text, str):
                         parts.append(text)
-            text = getattr(item, "text", None)
-            if isinstance(text, str):
-                parts.append(text)
+            else:
+                text = getattr(item, "text", None)
+                if isinstance(text, str):
+                    parts.append(text)
 
         if parts:
             return "\n".join(parts)
