@@ -34,9 +34,9 @@ def normalize_server_url(server_url: str) -> str:
     if not parsed.netloc:
         raise ValueError("server_url must include host and optional port")
 
-    # Ensure no trailing slash and no duplicate /v1.
+    # Ensure no trailing slash and no duplicate /v1 (case-insensitive).
     value = value.rstrip("/")
-    if value.endswith("/v1"):
+    if value.lower().endswith("/v1"):
         value = value[:-3]
     return value
 
