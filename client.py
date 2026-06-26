@@ -245,18 +245,25 @@ def extract_responses_text(response: Any) -> str:
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
 _THINK_START_RE = re.compile(r"<think>.*$", flags=re.IGNORECASE | re.DOTALL)
+_THINK_CLOSE_RE = re.compile(r"</think>", flags=re.IGNORECASE)
 
 
 def strip_think_content(text: str | None) -> str:
     """
     Remove reasoning blocks enclosed in <think>...</think>.
-    Also removes dangling <think> blocks without a closing tag.
+    Also removes dangling <think> blocks without a closing tag and any
+    orphan </think> closing tags left by nested or malformed think blocks.
     """
     if not text:
         return ""
 
     cleaned = _THINK_BLOCK_RE.sub("", text)
     cleaned = _THINK_START_RE.sub("", cleaned)
+    # After the above two passes, any remaining </think> tags are orphaned
+    # closing tags produced by nested blocks (e.g. <think><think>…</think></think>).
+    # The non-greedy block regex only removes up to the *first* </think>, leaving
+    # the outer one behind; strip it here so it never appears in visible output.
+    cleaned = _THINK_CLOSE_RE.sub("", cleaned)
     return cleaned.strip()
 
 
