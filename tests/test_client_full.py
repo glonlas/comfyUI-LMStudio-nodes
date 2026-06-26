@@ -29,6 +29,18 @@ def test_normalize_server_url_rejects_invalid_values() -> None:
         client.normalize_server_url("http://")
 
 
+def test_normalize_server_url_strips_v1_case_insensitive() -> None:
+    # Lowercase (existing behaviour).
+    assert client.normalize_server_url("http://localhost:1234/v1") == "http://localhost:1234"
+    # Uppercase /V1 was silently left in place before the fix, causing
+    # to_openai_base_url() to produce "…/V1/v1" — a double-suffix broken URL.
+    assert client.normalize_server_url("http://localhost:1234/V1") == "http://localhost:1234"
+    # Mixed case.
+    assert client.normalize_server_url("http://localhost:1234/V1/") == "http://localhost:1234"
+    # to_openai_base_url must append exactly one /v1 regardless of input casing.
+    assert client.to_openai_base_url("http://localhost:1234/V1") == "http://localhost:1234/v1"
+
+
 def test_to_openai_base_url_appends_v1() -> None:
     assert client.to_openai_base_url("http://127.0.0.1:1234") == "http://127.0.0.1:1234/v1"
 
