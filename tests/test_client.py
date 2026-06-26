@@ -64,3 +64,18 @@ def test_strip_think_content_removes_dangling_start_tag() -> None:
     # strip() removes the trailing real newline left after the dangling block is excised.
     text = "Visible output\n<think>unfinished"
     assert client.strip_think_content(text) == "Visible output"
+
+
+def test_strip_think_content_nested_think_tags_no_orphan_close() -> None:
+    # When a think block contains nested <think> tags (e.g. a model quoting the tag
+    # in its own reasoning), the non-greedy regex matches up to the *first* </think>,
+    # which would leave the outer closing tag as an orphan in the visible output.
+    # The fix strips any remaining </think> tags after the block/dangling passes.
+    assert client.strip_think_content("<think><think>nested</think></think>") == ""
+    # Regression: visible text surrounding nested blocks must be preserved intact.
+    result = client.strip_think_content(
+        "Before <think>reasoning <think>deep</think></think> after"
+    )
+    assert "</think>" not in result
+    assert "Before" in result
+    assert "after" in result
