@@ -8,11 +8,15 @@ Small ComfyUI custom nodes to connect to a remote LMStudio server through OpenAI
 
 - **LMStudio - Connect**
   - Connect to a remote LMStudio URL
-  - Set API token
-  - Pull/load model list automatically (Refresh Models)
-  - Test connectivity to server
-  - Supports LM **Reasonning** mode toggle
-  - Supports Tooling / MCP toggle
+  - Pick the model from a dropdown populated by **Refresh Models**
+  - **Test connectivity** to the server
+  - **Thinking / Reasoning** control — `auto` / `on` / `off`:
+    - `auto` — defer to the model, but force reasoning on for families that stay
+      silent by default (Gemma). Qwen3-style models already think by default.
+    - `on` — force reasoning on (`enable_thinking: true`).
+    - `off` — suppress reasoning so the model answers directly and doesn't burn
+      its token budget on a hidden `<think>` trace.
+  - Advanced: API token, Tooling / MCP toggle, max tokens, temperature, timeout
 
 - **LMStudio - Text Gen**
   - System prompt + user prompt

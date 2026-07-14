@@ -14,7 +14,7 @@ def test_connection_payload_is_frozen_dataclass() -> None:
         base_url="http://127.0.0.1:1234/v1",
         api_key="-",
         model="m1",
-        reasoning_enabled=False,
+        thinking="auto",
         max_tokens=64,
         temperature=0.5,
         timeout_seconds=10,

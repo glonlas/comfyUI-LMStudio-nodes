@@ -5,11 +5,17 @@ from comfy_api.latest import io, ui
 from .client import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
+    DEFAULT_THINKING,
     DEFAULT_TIMEOUT_SECONDS,
     MODEL_PLACEHOLDER,
+    THINK_MODE_DEFAULT,
+    THINK_MODE_FORCE,
+    THINK_MODE_SUPPRESS,
+    THINKING_OPTIONS,
     get_server_models,
     normalize_api_key,
     normalize_server_url,
+    resolve_thinking_mode,
 )
 from .iotypes import ParamConnection
 from .models import LMStudioConnectionPayload
@@ -24,7 +30,8 @@ class LMStudioConnect(io.ComfyNode):
             category="LMStudio",
             description=(
                 "Creates a reusable LMStudio connection for downstream nodes. "
-                "Use the refresh/test buttons on this node to fetch models from the remote server."
+                "Set the Server URL, then click 'Refresh Models' to load and pick a model. "
+                "'Test Connection' verifies the server is reachable."
             ),
             inputs=[
                 io.String.Input(
@@ -32,41 +39,52 @@ class LMStudioConnect(io.ComfyNode):
                     display_name="Server URL",
                     default="http://127.0.0.1:1234",
                     placeholder="http://10.168.168.7:1234",
-                    tooltip="LMStudio server URL (without /v1).",
+                    tooltip="LMStudio server address, e.g. http://127.0.0.1:1234 (no /v1).",
+                ),
+                io.Combo.Input(
+                    id="model",
+                    display_name="Model",
+                    options=[MODEL_PLACEHOLDER],
+                    default=MODEL_PLACEHOLDER,
+                    tooltip=(
+                        "Loaded model to use. Click 'Refresh Models' to populate this "
+                        "dropdown from the server, then pick one."
+                    ),
+                ),
+                io.Combo.Input(
+                    id="thinking",
+                    display_name="Thinking / Reasoning",
+                    options=list(THINKING_OPTIONS),
+                    default=DEFAULT_THINKING,
+                    tooltip=(
+                        "Controls the model's reasoning phase.\n"
+                        "• auto — let the model decide; Gemma-family models are nudged on "
+                        "(they stay silent otherwise).\n"
+                        "• on — force reasoning on (enable_thinking:true).\n"
+                        "• off — suppress reasoning so the model answers directly, saving tokens."
+                    ),
                 ),
                 io.String.Input(
                     id="api_token",
                     display_name="API Token",
                     default="-",
                     placeholder="Leave '-' for lm-studio",
-                    tooltip="Bearer token for LMStudio OpenAI-compatible API.",
-                ),
-                io.String.Input(
-                    id="model",
-                    display_name="Model",
-                    default=MODEL_PLACEHOLDER,
-                    tooltip=(
-                        "Model id. The web extension renders this field as a dropdown and syncs the selected model value."
-                    ),
-                ),
-                io.Boolean.Input(
-                    id="reasoning_enabled",
-                    display_name="Enable Reasoning",
-                    default=False,
-                    tooltip="Enable model reasoning hints when using the responses endpoint.",
+                    tooltip="Bearer token for the LMStudio OpenAI-compatible API. Leave '-' for local servers.",
+                    advanced=True,
                 ),
                 io.Boolean.Input(
                     id="use_tooling_mcp",
                     display_name="Use Tooling / MCP",
                     default=False,
                     tooltip=(
-                        "Expose intent to use MCP tooling. Useful only when your target model/session is configured "
-                        "for tool-enabled responses."
+                        "Signal intent to use MCP tooling. Only useful when the target "
+                        "model/session is configured for tool-enabled responses."
                     ),
+                    advanced=True,
                 ),
                 io.Int.Input(
                     id="max_tokens",
-                    display_name="Max Token",
+                    display_name="Max Tokens",
                     default=DEFAULT_MAX_TOKENS,
                     min=1,
                     max=1_000_000,
@@ -115,7 +133,17 @@ class LMStudioConnect(io.ComfyNode):
         )
 
     @classmethod
-    def validate_inputs(cls, server_url: str, timeout_seconds: int, max_tokens: int) -> bool | str:
+    def validate_inputs(
+        cls,
+        server_url: str,
+        timeout_seconds: int,
+        max_tokens: int,
+        model: str | None = None,
+    ) -> bool | str:
+        # `model` is accepted here purely so ComfyUI skips its built-in combo
+        # "value not in list" check: the real option list is only known at
+        # runtime (fetched from the server), so the schema ships a placeholder.
+        # Actual model availability is validated in execute().
         try:
             normalize_server_url(server_url)
         except ValueError as exc:
@@ -133,7 +161,7 @@ class LMStudioConnect(io.ComfyNode):
         server_url: str,
         api_token: str | None,
         model: str,
-        reasoning_enabled: bool,
+        thinking: str,
         test_connectivity: bool,
         max_tokens: int,
         temperature: float,
@@ -171,21 +199,32 @@ class LMStudioConnect(io.ComfyNode):
             base_url=f"{normalized_server_url}/v1",
             api_key=normalize_api_key(api_token),
             model=model_name,
-            reasoning_enabled=reasoning_enabled,
+            thinking=thinking,
             max_tokens=max_tokens,
             temperature=temperature,
             timeout_seconds=timeout_seconds,
             use_tooling_mcp=use_tooling_mcp,
         )
 
+        think_mode = resolve_thinking_mode(thinking, model_name)
+        think_label = {
+            THINK_MODE_FORCE: "on",
+            THINK_MODE_SUPPRESS: "off",
+            THINK_MODE_DEFAULT: "model default",
+        }[think_mode]
+        thinking_note = f" Thinking: {thinking} ({think_label})."
+
         model_count = len(models)
         if should_probe_models:
             status = (
                 f"Connected to {normalized_server_url}. "
-                f"Found {model_count} model(s). Using '{model_name}'."
+                f"Found {model_count} model(s). Using '{model_name}'.{thinking_note}"
             )
         else:
-            status = f"Connection prepared for {normalized_server_url}. Using '{model_name}'."
+            status = (
+                f"Connection prepared for {normalized_server_url}. "
+                f"Using '{model_name}'.{thinking_note}"
+            )
 
         return io.NodeOutput(
             payload,

@@ -5,13 +5,17 @@ from typing import Any
 from comfy_api.latest import io, ui
 
 from .client import (
+    THINK_MODE_FORCE,
+    apply_thinking_prefill,
     build_chat_messages_with_image,
     comfy_image_to_base64_png_url,
     create_openai_client,
     extract_chat_completion_text,
     extract_responses_text,
     resolve_request_seed,
+    resolve_thinking_mode,
     strip_think_content,
+    thinking_chat_template_kwargs,
 )
 from .iotypes import ParamConnection
 from .models import LMStudioConnectionPayload
@@ -111,8 +115,14 @@ class LMStudioImageToText(io.ComfyNode):
         }
         if system_prompt.strip():
             kwargs["instructions"] = system_prompt
-        if connection.reasoning_enabled:
+
+        mode = resolve_thinking_mode(connection.thinking, connection.model)
+        if mode == THINK_MODE_FORCE:
             kwargs["reasoning"] = {"effort": "medium"}
+        template_kwargs = thinking_chat_template_kwargs(mode)
+        if template_kwargs is not None:
+            kwargs["extra_body"] = {"chat_template_kwargs": template_kwargs}
+
         if connection.use_tooling_mcp:
             kwargs["metadata"] = {"lmstudio_tooling_mcp_requested": "true"}
 
@@ -164,18 +174,28 @@ class LMStudioImageToText(io.ComfyNode):
             first_image = image[0] if is_batch else image
             image_data_url = comfy_image_to_base64_png_url(first_image)
 
-            completion = client.chat.completions.create(
-                model=connection.model,
-                messages=build_chat_messages_with_image(
+            mode = resolve_thinking_mode(connection.thinking, connection.model)
+            messages = apply_thinking_prefill(
+                build_chat_messages_with_image(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     image_data_url=image_data_url,
                 ),
-                seed=resolved_seed,
-                temperature=connection.temperature,
-                max_tokens=connection.max_tokens,
-                n=1,
+                mode,
             )
+            completion_kwargs: dict[str, Any] = {
+                "model": connection.model,
+                "messages": messages,
+                "seed": resolved_seed,
+                "temperature": connection.temperature,
+                "max_tokens": connection.max_tokens,
+                "n": 1,
+            }
+            template_kwargs = thinking_chat_template_kwargs(mode)
+            if template_kwargs is not None:
+                completion_kwargs["extra_body"] = {"chat_template_kwargs": template_kwargs}
+
+            completion = client.chat.completions.create(**completion_kwargs)
             text = extract_chat_completion_text(completion).strip()
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")

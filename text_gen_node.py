@@ -5,13 +5,17 @@ from typing import Any
 from comfy_api.latest import io, ui
 
 from .client import (
+    THINK_MODE_FORCE,
+    apply_thinking_prefill,
     build_chat_messages,
     build_responses_input_text,
     create_openai_client,
     extract_chat_completion_text,
     extract_responses_text,
     resolve_request_seed,
+    resolve_thinking_mode,
     strip_think_content,
+    thinking_chat_template_kwargs,
 )
 from .iotypes import ParamConnection
 from .models import LMStudioConnectionPayload
@@ -87,8 +91,13 @@ class LMStudioTextGen(io.ComfyNode):
         }
         if system_prompt.strip():
             kwargs["instructions"] = system_prompt
-        if connection.reasoning_enabled:
+
+        mode = resolve_thinking_mode(connection.thinking, connection.model)
+        if mode == THINK_MODE_FORCE:
             kwargs["reasoning"] = {"effort": "medium"}
+        template_kwargs = thinking_chat_template_kwargs(mode)
+        if template_kwargs is not None:
+            kwargs["extra_body"] = {"chat_template_kwargs": template_kwargs}
 
         # MCP/tooling requires additional tool definitions and server details.
         # Keep an explicit metadata signal for future extension without sending invalid tool payloads.
@@ -136,14 +145,23 @@ class LMStudioTextGen(io.ComfyNode):
             via_endpoint = "chat.completions"
             fallback_reason = str(responses_error)
 
-            completion = client.chat.completions.create(
-                model=connection.model,
-                messages=build_chat_messages(system_prompt, user_prompt),
-                seed=resolved_seed,
-                temperature=connection.temperature,
-                max_tokens=connection.max_tokens,
-                n=1,
+            mode = resolve_thinking_mode(connection.thinking, connection.model)
+            messages = apply_thinking_prefill(
+                build_chat_messages(system_prompt, user_prompt), mode
             )
+            completion_kwargs: dict[str, Any] = {
+                "model": connection.model,
+                "messages": messages,
+                "seed": resolved_seed,
+                "temperature": connection.temperature,
+                "max_tokens": connection.max_tokens,
+                "n": 1,
+            }
+            template_kwargs = thinking_chat_template_kwargs(mode)
+            if template_kwargs is not None:
+                completion_kwargs["extra_body"] = {"chat_template_kwargs": template_kwargs}
+
+            completion = client.chat.completions.create(**completion_kwargs)
             text = extract_chat_completion_text(completion).strip()
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")

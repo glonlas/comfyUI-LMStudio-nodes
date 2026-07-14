@@ -7,7 +7,7 @@ class LMStudioConnectionPayload:
     base_url: str
     api_key: str
     model: str
-    reasoning_enabled: bool
+    thinking: str
     max_tokens: int
     temperature: float
     timeout_seconds: int
