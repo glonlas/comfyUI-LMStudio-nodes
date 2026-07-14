@@ -30,6 +30,12 @@ function getWidget(node, name) {
   return node.widgets?.find((widget) => widget?.name === name);
 }
 
+function getModelWidget(node) {
+  // The backend now ships `model` as a native combo, so there is exactly one
+  // model widget — no injected duplicate. Match by id first, display name second.
+  return getWidget(node, "model") || getWidget(node, "Model");
+}
+
 function normalizeModelList(models) {
   if (!Array.isArray(models)) {
     return [];
@@ -47,68 +53,46 @@ function normalizeModelList(models) {
   return out;
 }
 
-function ensureModelDropdown(node) {
-  if (node.__lmstudioModelDropdown && node.__lmstudioModelTextWidget) {
-    return {
-      comboWidget: node.__lmstudioModelDropdown,
-      textWidget: node.__lmstudioModelTextWidget,
-    };
+// Keep the currently-selected model visible even before a refresh: a workflow
+// reloaded from disk restores the saved value, but the combo only knows the
+// placeholder until the server is queried again.
+function ensureSelectionInOptions(node) {
+  const widget = getModelWidget(node);
+  if (!widget?.options) {
+    return;
   }
-
-  const modelTextWidget = getWidget(node, "model");
-  if (!modelTextWidget) {
-    return null;
+  const current = String(widget.value ?? "").trim();
+  const options = normalizeModelList(widget.options.values || []);
+  if (options.length === 0) {
+    options.push(MODEL_PLACEHOLDER);
   }
-
-  modelTextWidget.hidden = true;
-  const currentModel = String(modelTextWidget.value ?? "").trim();
-  const initialValues = currentModel && currentModel !== MODEL_PLACEHOLDER
-    ? [currentModel]
-    : [MODEL_PLACEHOLDER];
-
-  const comboWidget = node.addWidget(
-    "combo",
-    "Model",
-    initialValues[0],
-    (value) => {
-      modelTextWidget.value = String(value ?? "").trim();
-    },
-    { values: initialValues }
-  );
-
-  // Keep visible ordering aligned with backend schema: insert combo at the original model slot position.
-  const modelIndex = node.widgets?.indexOf(modelTextWidget) ?? -1;
-  const comboIndex = node.widgets?.indexOf(comboWidget) ?? -1;
-  if (modelIndex >= 0 && comboIndex >= 0 && comboIndex !== modelIndex) {
-    node.widgets.splice(comboIndex, 1);
-    node.widgets.splice(modelIndex, 0, comboWidget);
+  if (current && current !== MODEL_PLACEHOLDER && !options.includes(current)) {
+    options.unshift(current);
   }
-
-  node.__lmstudioModelDropdown = comboWidget;
-  node.__lmstudioModelTextWidget = modelTextWidget;
-
-  return { comboWidget, textWidget: modelTextWidget };
+  widget.options.values = options;
 }
 
-function syncDropdownFromText(node) {
-  const refs = ensureModelDropdown(node);
-  if (!refs) {
+function applyModelOptions(node, models) {
+  const widget = getModelWidget(node);
+  if (!widget?.options) {
     return;
   }
 
-  const { comboWidget, textWidget } = refs;
-  const currentModel = String(textWidget.value ?? "").trim();
-  const options = normalizeModelList(comboWidget?.options?.values || []);
-
-  if (!currentModel) {
-    return;
+  const current = String(widget.value ?? "").trim();
+  let nextValues = normalizeModelList(models);
+  if (current && current !== MODEL_PLACEHOLDER && !nextValues.includes(current)) {
+    nextValues.unshift(current);
+  }
+  if (nextValues.length === 0) {
+    nextValues = [MODEL_PLACEHOLDER];
   }
 
-  if (!options.includes(currentModel)) {
-    options.unshift(currentModel);
-    comboWidget.options.values = options;
-  }
-  comboWidget.value = currentModel;
+  widget.options.values = nextValues;
+  widget.value = current && nextValues.includes(current) ? current : nextValues[0];
+  widget.callback?.(widget.value);
+
+  node.setDirtyCanvas?.(true, true);
+  node.graph?.setDirtyCanvas?.(true, true);
 }
 
 function buildQuery(node) {
@@ -147,46 +131,37 @@ async function fetchJson(path) {
   return payload;
 }
 
-function applyModelOptions(node, models) {
-  const refs = ensureModelDropdown(node);
-  if (!refs) {
-    return;
-  }
-
-  const { comboWidget, textWidget } = refs;
-  const currentModel = String(textWidget.value ?? "").trim();
-
-  let nextValues = normalizeModelList(models);
-  if (currentModel && currentModel !== MODEL_PLACEHOLDER && !nextValues.includes(currentModel)) {
-    nextValues.unshift(currentModel);
-  }
-  if (nextValues.length === 0) {
-    nextValues = [MODEL_PLACEHOLDER];
-  }
-
-  comboWidget.options.values = nextValues;
-
-  const selected = currentModel && nextValues.includes(currentModel)
-    ? currentModel
-    : nextValues[0];
-
-  comboWidget.value = selected;
-  textWidget.value = selected;
-
-  node.setDirtyCanvas?.(true, true);
-  node.graph?.setDirtyCanvas?.(true, true);
-}
-
-function notifySuccess(message) {
+function notify(severity, message) {
+  const summary = severity === "error" ? "LMStudio — Error" : "LMStudio";
   if (typeof app.extensionManager?.toast?.add === "function") {
     app.extensionManager.toast.add({
-      severity: "success",
-      summary: "LMStudio",
+      severity,
+      summary,
       detail: message,
-      life: 3500,
+      life: severity === "error" ? 6000 : 3500,
     });
+  } else if (severity === "error") {
+    console.error(`[LMStudio] ${message}`);
   } else {
     console.info(`[LMStudio] ${message}`);
+  }
+}
+
+// Run an async button handler with a "…" progress label and unified error toasts,
+// so the user gets feedback on the node instead of a blocking window.alert.
+async function runWithButtonFeedback(button, busyLabel, action, failPrefix) {
+  const originalLabel = button.name;
+  button.name = busyLabel;
+  button.disabled = true;
+  try {
+    await action();
+  } catch (error) {
+    const message = error?.message || String(error);
+    console.error(`[LMStudio] ${failPrefix}`, error);
+    notify("error", `${failPrefix}: ${message}`);
+  } finally {
+    button.name = originalLabel;
+    button.disabled = false;
   }
 }
 
@@ -267,13 +242,14 @@ function attachButtons(node) {
     return;
   }
 
-  ensureModelDropdown(node);
-  syncDropdownFromText(node);
+  ensureSelectionInOptions(node);
 
   const refreshModels = async () => {
     const query = buildQuery(node);
     const payload = await fetchJson(`/lmstudio/models?${query.toString()}`);
-    applyModelOptions(node, payload.models || []);
+    const models = payload.models || [];
+    applyModelOptions(node, models);
+    notify("success", `Loaded ${models.length} model(s). Pick one from the Model dropdown.`);
   };
 
   const testConnection = async () => {
@@ -281,30 +257,26 @@ function attachButtons(node) {
     const payload = await fetchJson(`/lmstudio/test?${query.toString()}`);
     const models = payload.models || [];
     applyModelOptions(node, models);
-
-    const message = payload.message || `Connected. ${models.length} model(s) available.`;
-    notifySuccess(message);
+    notify("success", payload.message || `Connected. ${models.length} model(s) available.`);
   };
 
-  node.addWidget("button", "Refresh Models", null, async () => {
-    try {
-      await refreshModels();
-    } catch (error) {
-      const message = error?.message || String(error);
-      console.error("[LMStudio] Model refresh failed", error);
-      window.alert(`Model refresh failed: ${message}`);
-    }
-  });
+  const refreshButton = node.addWidget("button", "🔄  Refresh Models", null, () =>
+    runWithButtonFeedback(
+      refreshButton,
+      "Refreshing…",
+      refreshModels,
+      "Model refresh failed"
+    )
+  );
 
-  node.addWidget("button", "Test Connection", null, async () => {
-    try {
-      await testConnection();
-    } catch (error) {
-      const message = error?.message || String(error);
-      console.error("[LMStudio] Connectivity test failed", error);
-      window.alert(`Connectivity test failed: ${message}`);
-    }
-  });
+  const testButton = node.addWidget("button", "🔌  Test Connection", null, () =>
+    runWithButtonFeedback(
+      testButton,
+      "Testing…",
+      testConnection,
+      "Connectivity test failed"
+    )
+  );
 
   node.__lmstudioButtonsAttached = true;
 }
@@ -322,8 +294,7 @@ app.registerExtension({
       const onConfigure = nodeType.prototype.onConfigure;
       nodeType.prototype.onConfigure = function () {
         onConfigure?.apply(this, arguments);
-        ensureModelDropdown(this);
-        syncDropdownFromText(this);
+        ensureSelectionInOptions(this);
       };
     }
 

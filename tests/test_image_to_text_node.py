@@ -13,14 +13,14 @@ def _image_module():
     return import_repo_module("image_to_text_node", force_reload=True)
 
 
-def _connection_payload(*, reasoning_enabled: bool = False, use_tooling_mcp: bool = False):
+def _connection_payload(*, thinking: str = "auto", use_tooling_mcp: bool = False):
     models = import_repo_module("models", force_reload=True)
     return models.LMStudioConnectionPayload(
         server_url="http://127.0.0.1:1234",
         base_url="http://127.0.0.1:1234/v1",
         api_key="token",
         model="vision-model",
-        reasoning_enabled=reasoning_enabled,
+        thinking=thinking,
         max_tokens=128,
         temperature=0.3,
         timeout_seconds=30,
@@ -73,7 +73,7 @@ def test_responses_kwargs_single_and_batch() -> None:
     assert single_content[1]["type"] == "input_image"
 
     kwargs_batch = image_node.LMStudioImageToText._responses_kwargs(
-        connection=_connection_payload(reasoning_enabled=True, use_tooling_mcp=True),
+        connection=_connection_payload(thinking="on", use_tooling_mcp=True),
         image=_batch_image(),
         system_prompt="sys",
         user_prompt="describe",
@@ -82,6 +82,7 @@ def test_responses_kwargs_single_and_batch() -> None:
     batch_content = kwargs_batch["input"][0]["content"]
     assert len(batch_content) == 3
     assert kwargs_batch["reasoning"] == {"effort": "medium"}
+    assert kwargs_batch["extra_body"] == {"chat_template_kwargs": {"enable_thinking": True}}
     assert kwargs_batch["metadata"] == {"lmstudio_tooling_mcp_requested": "true"}
 
 
@@ -139,15 +140,22 @@ def test_execute_chat_fallback_reports_dropped_frames(
     completion = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content="fallback vision result"))]
     )
+    captured_kwargs: dict[str, object] = {}
+
+    def create_completion(**kwargs):
+        captured_kwargs.update(kwargs)
+        return completion
+
     fake_client = SimpleNamespace(
         responses=SimpleNamespace(create=raise_responses),
-        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: completion)),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)),
     )
     monkeypatch.setattr(image_node, "resolve_request_seed", lambda _: 99)
     monkeypatch.setattr(image_node, "create_openai_client", lambda **_: fake_client)
 
+    # thinking="off" exercises the suppression prefill + enable_thinking:false path.
     output = image_node.LMStudioImageToText.execute(
-        connection=_connection_payload(),
+        connection=_connection_payload(thinking="off"),
         image=_batch_image(),
         system_prompt="sys",
         user_prompt="describe",
@@ -158,6 +166,8 @@ def test_execute_chat_fallback_reports_dropped_frames(
     assert "via chat.completions" in output.ui.text
     assert "responses unavailable" in output.ui.text
     assert "additional frame(s) were dropped" in output.ui.text
+    assert captured_kwargs["messages"][-1] == {"role": "assistant", "content": "<think></think>"}
+    assert captured_kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 def test_execute_raises_when_all_text_is_think_blocks(

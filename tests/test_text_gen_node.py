@@ -11,18 +11,18 @@ def _text_module():
     return import_repo_module("text_gen_node", force_reload=True)
 
 
-def _connection_payload():
+def _connection_payload(*, thinking: str = "auto", use_tooling_mcp: bool = False, model: str = "model-a"):
     models = import_repo_module("models", force_reload=True)
     return models.LMStudioConnectionPayload(
         server_url="http://127.0.0.1:1234",
         base_url="http://127.0.0.1:1234/v1",
         api_key="token",
-        model="model-a",
-        reasoning_enabled=False,
+        model=model,
+        thinking=thinking,
         max_tokens=111,
         temperature=0.4,
         timeout_seconds=30,
-        use_tooling_mcp=False,
+        use_tooling_mcp=use_tooling_mcp,
     )
 
 
@@ -41,8 +41,8 @@ def test_define_schema_and_validate_inputs() -> None:
 
 def test_responses_kwargs_include_optional_fields() -> None:
     text_gen_node = _text_module()
-    connection = _connection_payload()
-    connection = connection.__class__(**{**connection.__dict__, "reasoning_enabled": True, "use_tooling_mcp": True})
+    # thinking="on" forces reasoning on (effort + enable_thinking:true kwarg).
+    connection = _connection_payload(thinking="on", use_tooling_mcp=True)
 
     kwargs = text_gen_node.LMStudioTextGen._responses_kwargs(
         connection=connection,
@@ -54,11 +54,27 @@ def test_responses_kwargs_include_optional_fields() -> None:
     assert kwargs["seed"] == 12
     assert kwargs["instructions"] == "sys"
     assert kwargs["reasoning"] == {"effort": "medium"}
+    assert kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": True}}
     assert kwargs["metadata"] == {"lmstudio_tooling_mcp_requested": "true"}
+
+
+def test_responses_kwargs_suppress_thinking_when_off() -> None:
+    text_gen_node = _text_module()
+    # thinking="off" suppresses reasoning: enable_thinking:false, no reasoning effort.
+    connection = _connection_payload(thinking="off")
+    kwargs = text_gen_node.LMStudioTextGen._responses_kwargs(
+        connection=connection,
+        system_prompt="sys",
+        user_prompt="user",
+        seed=5,
+    )
+    assert "reasoning" not in kwargs
+    assert kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 def test_responses_kwargs_omit_optional_fields_when_disabled() -> None:
     text_gen_node = _text_module()
+    # "auto" on a non-Gemma model defers to the template: nothing sent.
     connection = _connection_payload()
     kwargs = text_gen_node.LMStudioTextGen._responses_kwargs(
         connection=connection,
@@ -68,7 +84,22 @@ def test_responses_kwargs_omit_optional_fields_when_disabled() -> None:
     )
     assert "instructions" not in kwargs
     assert "reasoning" not in kwargs
+    assert "extra_body" not in kwargs
     assert "metadata" not in kwargs
+
+
+def test_responses_kwargs_auto_forces_thinking_for_gemma() -> None:
+    text_gen_node = _text_module()
+    # "auto" on a Gemma model forces thinking on (Gemma stays silent otherwise).
+    connection = _connection_payload(thinking="auto", model="google/gemma-3-12b")
+    kwargs = text_gen_node.LMStudioTextGen._responses_kwargs(
+        connection=connection,
+        system_prompt="sys",
+        user_prompt="user",
+        seed=7,
+    )
+    assert kwargs["reasoning"] == {"effort": "medium"}
+    assert kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
 def test_execute_rejects_empty_user_prompt() -> None:
@@ -119,21 +150,28 @@ def test_execute_uses_responses_endpoint_and_strips_think(
 
 def test_execute_falls_back_to_chat_completions(monkeypatch: pytest.MonkeyPatch) -> None:
     text_gen_node = _text_module()
+    captured_kwargs: dict[str, object] = {}
 
     def raise_responses(**kwargs):
         raise RuntimeError("responses disabled")
 
     completion = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="Fallback answer"))])
+
+    def create_completion(**kwargs):
+        captured_kwargs.update(kwargs)
+        return completion
+
     fake_client = SimpleNamespace(
         responses=SimpleNamespace(create=raise_responses),
-        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: completion)),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)),
     )
 
     monkeypatch.setattr(text_gen_node, "resolve_request_seed", lambda _: 99)
     monkeypatch.setattr(text_gen_node, "create_openai_client", lambda **_: fake_client)
 
+    # thinking="off" exercises the suppression prefill + enable_thinking:false path.
     output = text_gen_node.LMStudioTextGen.execute(
-        connection=_connection_payload(),
+        connection=_connection_payload(thinking="off"),
         system_prompt="sys",
         user_prompt="hello",
         seed=0,
@@ -142,6 +180,8 @@ def test_execute_falls_back_to_chat_completions(monkeypatch: pytest.MonkeyPatch)
     assert output[0] == "Fallback answer"
     assert "via chat.completions" in output.ui.text
     assert "responses disabled" in output.ui.text
+    assert captured_kwargs["messages"][-1] == {"role": "assistant", "content": "<think></think>"}
+    assert captured_kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 def test_execute_raises_if_both_endpoints_return_no_text(

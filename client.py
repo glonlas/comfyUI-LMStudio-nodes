@@ -22,6 +22,13 @@ DEFAULT_API_KEY_PLACEHOLDER = "-"
 DEFAULT_API_KEY_FALLBACK = "lm-studio"
 MODEL_PLACEHOLDER = "<refresh models>"
 
+# User-facing thinking/reasoning choices exposed on the Connect node.
+THINKING_AUTO = "auto"
+THINKING_ON = "on"
+THINKING_OFF = "off"
+THINKING_OPTIONS = [THINKING_AUTO, THINKING_ON, THINKING_OFF]
+DEFAULT_THINKING = THINKING_AUTO
+
 
 def normalize_server_url(server_url: str) -> str:
     value = (server_url or "").strip()
@@ -246,6 +253,69 @@ def extract_responses_text(response: Any) -> str:
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
 _THINK_START_RE = re.compile(r"<think>.*$", flags=re.IGNORECASE | re.DOTALL)
 _THINK_CLOSE_RE = re.compile(r"</think>", flags=re.IGNORECASE)
+
+# Wire-level thinking modes resolved from the user's THINKING_* choice.
+THINK_MODE_SUPPRESS = "suppress"  # actively turn reasoning OFF
+THINK_MODE_FORCE = "force"  # actively turn reasoning ON
+THINK_MODE_DEFAULT = "default"  # send nothing; defer to the model's own template
+
+# Trailing assistant turn that opens AND closes the reasoning block so a
+# Qwen-style chat template starts generation *past* the <think> phase and the
+# model writes prose immediately. Paired with THINK_SUPPRESS_KWARGS below,
+# which newer templates (Qwen3+) actually honor. Harmless on non-thinking models.
+THINK_SUPPRESS_PREFILL: dict[str, Any] = {"role": "assistant", "content": "<think></think>"}
+
+# Template-level thinking switch — the same mechanism LM Studio's own "thinking"
+# toggle uses. Forwarded to the upstream Jinja chat template via
+# `chat_template_kwargs`. A *top-level* enable_thinking field is dropped before it
+# reaches the template; the nesting under chat_template_kwargs is what makes it
+# take effect. Ignored by templates that don't define the kwarg.
+THINK_SUPPRESS_KWARGS: dict[str, Any] = {"enable_thinking": False}
+THINK_ENABLE_KWARGS: dict[str, Any] = {"enable_thinking": True}
+
+# Families whose LM Studio chat template does NOT think by default, so thinking
+# level "auto" must actively pass enable_thinking:true to get any reasoning.
+# Gemma (2/3/4) is the known case; Qwen 3.x-style templates think by default.
+_THINK_OFF_BY_DEFAULT_RE = re.compile(r"\bgemma\b|gemma[-_]?\d", flags=re.IGNORECASE)
+
+
+def model_thinks_off_by_default(model: str | None) -> bool:
+    """True when the model's family needs thinking forced on in "auto" mode."""
+    return bool(_THINK_OFF_BY_DEFAULT_RE.search(model or ""))
+
+
+def resolve_thinking_mode(thinking: str | None, model: str | None) -> str:
+    """Resolve a user THINKING_* choice + model id into a wire-level mode.
+
+    - "off"  -> suppress (enable_thinking:false + closed <think> prefill)
+    - "on"   -> force    (enable_thinking:true)
+    - "auto" -> force for families that don't think by default (Gemma),
+                otherwise default (send nothing — the template already thinks).
+    """
+    choice = (thinking or DEFAULT_THINKING).strip().lower()
+    if choice == THINKING_OFF:
+        return THINK_MODE_SUPPRESS
+    if choice == THINKING_ON:
+        return THINK_MODE_FORCE
+    return THINK_MODE_FORCE if model_thinks_off_by_default(model) else THINK_MODE_DEFAULT
+
+
+def thinking_chat_template_kwargs(mode: str) -> dict[str, Any] | None:
+    """chat_template_kwargs payload for a resolved mode (None = send nothing)."""
+    if mode == THINK_MODE_SUPPRESS:
+        return dict(THINK_SUPPRESS_KWARGS)
+    if mode == THINK_MODE_FORCE:
+        return dict(THINK_ENABLE_KWARGS)
+    return None
+
+
+def apply_thinking_prefill(
+    messages: list[dict[str, Any]], mode: str
+) -> list[dict[str, Any]]:
+    """Append the closed-<think> suppression prefill when actively suppressing."""
+    if mode == THINK_MODE_SUPPRESS:
+        return [*messages, dict(THINK_SUPPRESS_PREFILL)]
+    return messages
 
 
 def strip_think_content(text: str | None) -> str:

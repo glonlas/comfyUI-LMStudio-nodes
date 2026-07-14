@@ -102,6 +102,7 @@ def _install_comfy_stubs() -> None:
         Int=_FieldType,
         Float=_FieldType,
         Image=_FieldType,
+        Combo=_FieldType,
         Custom=_custom_type,
     )
     ui_module = types.SimpleNamespace(

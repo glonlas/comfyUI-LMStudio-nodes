@@ -145,14 +145,14 @@ def _image_module():
     return import_repo_module("image_to_text_node", force_reload=True)
 
 
-def _connection_payload(*, reasoning_enabled: bool = False, use_tooling_mcp: bool = False):
+def _connection_payload(*, thinking: str = "auto", use_tooling_mcp: bool = False):
     models = import_repo_module("models", force_reload=True)
     return models.LMStudioConnectionPayload(
         server_url="http://127.0.0.1:1234",
         base_url="http://127.0.0.1:1234/v1",
         api_key="token",
         model="vision-model",
-        reasoning_enabled=reasoning_enabled,
+        thinking=thinking,
         max_tokens=128,
         temperature=0.3,
         timeout_seconds=30,

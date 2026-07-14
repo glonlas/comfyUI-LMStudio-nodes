@@ -17,9 +17,9 @@ def test_define_schema_has_expected_order_and_defaults() -> None:
     input_ids = [entry.id for entry in schema.inputs]
     assert input_ids == [
         "server_url",
-        "api_token",
         "model",
-        "reasoning_enabled",
+        "thinking",
+        "api_token",
         "use_tooling_mcp",
         "max_tokens",
         "temperature",
@@ -30,9 +30,15 @@ def test_define_schema_has_expected_order_and_defaults() -> None:
     by_id = {entry.id: entry for entry in schema.inputs}
     assert by_id["server_url"].default == "http://127.0.0.1:1234"
     assert by_id["api_token"].default == "-"
+    assert by_id["model"].default == "<refresh models>"
+    assert by_id["model"].options == ["<refresh models>"]
+    assert by_id["thinking"].default == "auto"
+    assert by_id["thinking"].options == ["auto", "on", "off"]
     assert by_id["max_tokens"].default == 1024
     assert by_id["temperature"].default == 0.7
     assert by_id["timeout_seconds"].default == 600
+    assert by_id["api_token"].advanced is True
+    assert by_id["use_tooling_mcp"].advanced is True
     assert by_id["max_tokens"].advanced is True
     assert by_id["temperature"].advanced is True
     assert by_id["timeout_seconds"].advanced is True
@@ -44,6 +50,8 @@ def test_validate_inputs() -> None:
     cls = connect_node.LMStudioConnect
 
     assert cls.validate_inputs("http://127.0.0.1:1234", 10, 128) is True
+    # `model` is accepted (and ignored) so ComfyUI skips its combo validation.
+    assert cls.validate_inputs("http://127.0.0.1:1234", 10, 128, model="any-model") is True
     assert "http://" in str(cls.validate_inputs("localhost:1234", 10, 128))
     assert cls.validate_inputs("http://127.0.0.1:1234", 0, 128) == "timeout_seconds must be >= 1"
     assert cls.validate_inputs("http://127.0.0.1:1234", 10, 0) == "max_tokens must be >= 1"
@@ -59,7 +67,7 @@ def test_execute_with_placeholder_model_uses_discovered_default(
         server_url=" http://10.0.0.1:1234/v1/ ",
         api_token="-",
         model="<refresh models>",
-        reasoning_enabled=True,
+        thinking="on",
         test_connectivity=True,
         max_tokens=321,
         temperature=0.6,
@@ -72,7 +80,7 @@ def test_execute_with_placeholder_model_uses_discovered_default(
     assert payload.server_url == "http://10.0.0.1:1234"
     assert payload.base_url == "http://10.0.0.1:1234/v1"
     assert payload.model == "m1"
-    assert payload.reasoning_enabled is True
+    assert payload.thinking == "on"
     assert payload.use_tooling_mcp is True
     assert payload.max_tokens == 321
     assert payload.temperature == 0.6
@@ -93,7 +101,7 @@ def test_execute_without_probe_keeps_selected_model(monkeypatch: pytest.MonkeyPa
         server_url="http://127.0.0.1:1234",
         api_token="token",
         model="manually-selected-model",
-        reasoning_enabled=False,
+        thinking="auto",
         test_connectivity=False,
         max_tokens=128,
         temperature=0.5,
@@ -118,7 +126,7 @@ def test_execute_raises_when_selected_model_not_on_server(
             server_url="http://127.0.0.1:1234",
             api_token="-",
             model="requested-model",
-            reasoning_enabled=False,
+            thinking="auto",
             test_connectivity=True,
             max_tokens=128,
             temperature=0.5,
@@ -138,7 +146,7 @@ def test_execute_raises_when_no_model_selected_and_none_discovered(
             server_url="http://127.0.0.1:1234",
             api_token="-",
             model="<refresh models>",
-            reasoning_enabled=False,
+            thinking="auto",
             test_connectivity=True,
             max_tokens=128,
             temperature=0.5,
