@@ -18,6 +18,7 @@ from .client import (
     resolve_thinking_mode,
 )
 from .iotypes import ParamConnection
+from .network import explain_network_errors
 from .models import LMStudioConnectionPayload
 
 
@@ -174,11 +175,12 @@ class LMStudioConnect(io.ComfyNode):
 
         should_probe_models = test_connectivity or model_name in {"", MODEL_PLACEHOLDER}
         if should_probe_models:
-            models = get_server_models(
-                server_url=normalized_server_url,
-                api_key=api_token,
-                timeout_seconds=timeout_seconds,
-            )
+            with explain_network_errors(normalized_server_url):
+                models = get_server_models(
+                    server_url=normalized_server_url,
+                    api_key=api_token,
+                    timeout_seconds=timeout_seconds,
+                )
 
         if model_name in {"", MODEL_PLACEHOLDER}:
             if models:
