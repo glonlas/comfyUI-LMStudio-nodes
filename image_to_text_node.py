@@ -19,6 +19,7 @@ from .client import (
 )
 from .iotypes import ParamConnection
 from .models import LMStudioConnectionPayload
+from .network import explain_network_errors
 
 
 class LMStudioImageToText(io.ComfyNode):
@@ -195,7 +196,8 @@ class LMStudioImageToText(io.ComfyNode):
             if template_kwargs is not None:
                 completion_kwargs["extra_body"] = {"chat_template_kwargs": template_kwargs}
 
-            completion = client.chat.completions.create(**completion_kwargs)
+            with explain_network_errors(connection.server_url):
+                completion = client.chat.completions.create(**completion_kwargs)
             text = extract_chat_completion_text(completion).strip()
             if not text:
                 raise ValueError("chat.completions fallback returned no text output")

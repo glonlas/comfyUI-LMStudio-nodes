@@ -37,6 +37,49 @@ Small ComfyUI custom nodes to connect to a remote LMStudio server through OpenAI
    ```
 3. Restart ComfyUI
 
+## Troubleshooting
+
+### macOS: "Connection error" / "No route to host" to a server on your network
+
+LM Studio runs on another machine (say `192.168.1.10`), `curl` from Terminal
+reaches it fine, but ComfyUI fails with `Connection error` or
+`[Errno 65] No route to host`.
+
+This is **macOS Local Network privacy**. Every app needs permission to talk to
+devices on your local network, and the app that launched ComfyUI does not have
+it. The nodes detect this case and print the fix, filled in with your own
+server address.
+
+**Fix 1: grant the permission.** System Settings → Privacy & Security →
+Local Network → switch on the app that runs ComfyUI (Terminal, iTerm,
+Comfy Desktop...). Then quit that app fully (⌘Q) and relaunch it.
+
+**Fix 2: the app is not in that list.** Some apps never ask for the
+permission, so they never appear there. Comfy Desktop 1.1.3 is one of them. Connections to
+your own Mac are always allowed, so run the bundled forwarder in a Terminal
+window. It accepts connections on `127.0.0.1` and relays them to your server:
+
+```bash
+python3 scripts/lan_forward.py --target 192.168.1.10:1234
+```
+
+Leave it running, then set **server_url** on *LMStudio - Connect* to
+`http://127.0.0.1:1234`. Use `--listen 11234` if port 1234 is taken on your
+Mac (then use `http://127.0.0.1:11234`). On startup the forwarder checks that
+it can reach the target, and it tells you if it cannot.
+
+The forwarder only needs the Python that ships with macOS (standard library,
+3.9+). It must run from an app that has Local Network permission, such as
+Terminal. A `launchd` agent is blocked the same way ComfyUI is. To start it
+at login, save this as `lan-forward.command`, make it executable
+(`chmod +x lan-forward.command`), and add it under System Settings → General →
+Login Items. It opens in Terminal:
+
+```bash
+#!/bin/bash
+exec python3 "/path/to/comfyUI-LMStudio-nodes/scripts/lan_forward.py" --target 192.168.1.10:1234
+```
+
 ## Testing
 
 Run the Python unit tests with coverage gate (`>=90%`):

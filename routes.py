@@ -4,6 +4,7 @@ from aiohttp import web
 from server import PromptServer
 
 from .client import get_server_models, normalize_server_url
+from .network import explain_network_errors
 
 
 _ROUTES_REGISTERED = False
@@ -29,11 +30,12 @@ async def _models_handler(request: web.Request) -> web.Response:
     try:
         timeout_seconds = _query_int(request, "timeout_seconds", 15)
         normalized_url = normalize_server_url(server_url)
-        models = get_server_models(
-            server_url=normalized_url,
-            api_key=api_token,
-            timeout_seconds=timeout_seconds,
-        )
+        with explain_network_errors(normalized_url):
+            models = get_server_models(
+                server_url=normalized_url,
+                api_key=api_token,
+                timeout_seconds=timeout_seconds,
+            )
     except ValueError as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     except Exception as exc:
@@ -64,11 +66,12 @@ async def _test_handler(request: web.Request) -> web.Response:
         # widget value anyway, so this only matters when the endpoint is called directly.
         timeout_seconds = _query_int(request, "timeout_seconds", 15)
         normalized_url = normalize_server_url(server_url)
-        models = get_server_models(
-            server_url=normalized_url,
-            api_key=api_token,
-            timeout_seconds=timeout_seconds,
-        )
+        with explain_network_errors(normalized_url):
+            models = get_server_models(
+                server_url=normalized_url,
+                api_key=api_token,
+                timeout_seconds=timeout_seconds,
+            )
     except ValueError as exc:
         return web.json_response({"ok": False, "error": str(exc)}, status=400)
     except Exception as exc:
